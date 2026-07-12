@@ -1,0 +1,56 @@
+name: Nightly Pipeline
+
+on:
+  schedule:
+    # 03:00 IST = 21:30 UTC
+    - cron: '30 21 * * *'
+  workflow_dispatch:
+    inputs:
+      bootstrap:
+        description: 'Run bootstrap instead of nightly (generates ~400 questions)'
+        type: boolean
+        default: false
+      budget:
+        description: 'Bootstrap budget (default 400)'
+        type: number
+        default: 400
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run nightly pipeline
+        if: ${{ !inputs.bootstrap }}
+        run: npm run nightly
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          APP_TOKEN: ${{ secrets.APP_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          NODE_ENV: production
+
+      - name: Run bootstrap
+        if: ${{ inputs.bootstrap }}
+        run: npm run bootstrap -- --budget=${{ inputs.budget }} --verbose
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          APP_TOKEN: ${{ secrets.APP_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          NODE_ENV: production
