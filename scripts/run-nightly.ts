@@ -34,7 +34,7 @@ async function main(): Promise<void> {
     lock_key: 'nightly',
     started_at: new Date(),
   });
-  const run_id = run._id as string;
+  const run_id = String(run._id);
 
   try {
     // Load all active tracks
@@ -54,7 +54,15 @@ async function main(): Promise<void> {
     // --- Stage 2: Generate ---
     console.log('[nightly] Stage 2 — Generate');
     const totalIntensity = tracks.reduce((sum, t) => sum + ((t.intensity as number) ?? 0), 0);
-    const generateStats: Record<string, unknown>[] = [];
+    const generateStats: Array<{
+      track: string;
+      budget: number;
+      generated: number;
+      rejected_gate1: number;
+      rejected_gate2: number;
+      rejected_gate3: number;
+      published: number;
+    }> = [];
     for (const track of tracks) {
       const key = (track.key ?? track._id) as string;
       const intensity = (track.intensity as number) ?? 0;
@@ -71,8 +79,22 @@ async function main(): Promise<void> {
     const freshStats = await reVerifyDisputed();
 
     // --- Finalize ---
+    const totals = generateStats.reduce(
+      (acc, s) => ({
+        generated: acc.generated + s.generated,
+        rejected_gate1: acc.rejected_gate1 + s.rejected_gate1,
+        rejected_gate2: acc.rejected_gate2 + s.rejected_gate2,
+        rejected_gate3: acc.rejected_gate3 + s.rejected_gate3,
+        published: acc.published + s.published,
+      }),
+      { generated: 0, rejected_gate1: 0, rejected_gate2: 0, rejected_gate3: 0, published: 0 },
+    );
+    await finalizeRun(run_id, {
+      ...totals,
+      disputed_rechecked: freshStats.fixed + freshStats.retired,
+    });
+
     const combinedStats = { ingest: ingestStats, generate: generateStats, freshness: freshStats };
-    await finalizeRun(run_id, combinedStats);
 
     console.log('[nightly] completed successfully at', new Date().toISOString());
     console.log('[nightly] stats:', JSON.stringify(combinedStats, null, 2));
