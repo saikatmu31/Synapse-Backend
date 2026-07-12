@@ -66,6 +66,16 @@ function computeDelay(attempt: number): number {
 
 const RETRY_HINT_BUFFER_MS = 1_000;
 
+// Daily-quota circuit breaker. A per-day 429 resets at midnight Pacific, so
+// retrying within the run is futile — and every paced retry wastes minutes.
+// Once tripped, all subsequent calls in this process fail instantly so the
+// pipeline finishes and reports instead of grinding for hours.
+let dailyQuotaExhausted = false;
+
+function isDailyQuotaError(err: unknown): boolean {
+  return err instanceof Error && /PerDay/i.test(err.message ?? '');
+}
+
 /**
  * Extract the server-suggested retry delay from a 429 error, if present.
  * Gemini quota errors include both a human-readable "Please retry in 26.8s"
@@ -119,6 +129,12 @@ export async function geminiJson<T>(
   schema: object,
   opts?: { temperature?: number; maxTokens?: number },
 ): Promise<T> {
+  if (dailyQuotaExhausted) {
+    throw new Error(
+      '[gemini] Daily quota already exhausted for this run — skipping call. ' +
+        'Free-tier daily limits reset at midnight Pacific time.',
+    );
+  }
   await acquireSemaphore();
   try {
     return await callWithRetry<T>(prompt, schema, opts);
@@ -138,7 +154,7 @@ async function callWithRetry<T>(
     try {
       await acquireRpmSlot();
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: env.GEMINI_MODEL,
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
@@ -156,6 +172,14 @@ async function callWithRetry<T>(
       return JSON.parse(text) as T;
     } catch (err) {
       lastError = err;
+
+      if (isDailyQuotaError(err)) {
+        dailyQuotaExhausted = true;
+        console.error(
+          '[gemini] Daily quota exhausted — failing fast for the remainder of this run.',
+        );
+        throw err;
+      }
 
       if (!isRetryableError(err)) {
         // Non-retryable client error (4xx except 429) — fail immediately.
