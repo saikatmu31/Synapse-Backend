@@ -7,13 +7,13 @@ on:
   workflow_dispatch:
     inputs:
       bootstrap:
-        description: 'Run bootstrap instead of nightly (generates ~400 questions)'
+        description: 'Run bootstrap instead of nightly'
         type: boolean
         default: false
       budget:
-        description: 'Bootstrap budget (default 400)'
+        description: 'Bootstrap budget (keep <= 30 on Gemini free tier: ~6 API calls per unit vs ~250/day quota)'
         type: number
-        default: 400
+        default: 30
 
 jobs:
   run-pipeline:

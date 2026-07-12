@@ -7,7 +7,7 @@ const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 // Semaphore — limits concurrent Gemini calls to avoid overwhelming the API.
 // ---------------------------------------------------------------------------
 
-const MAX_CONCURRENT = 10;
+const MAX_CONCURRENT = env.GEMINI_MAX_CONCURRENT;
 let activeCount = 0;
 const waitQueue: Array<() => void> = [];
 
@@ -29,6 +29,23 @@ function releaseSemaphore(): void {
   } else {
     activeCount--;
   }
+}
+
+// ---------------------------------------------------------------------------
+// RPM pacer — spaces out request *starts* so we never exceed the per-minute
+// quota. The semaphore above limits concurrency, not rate: sequential calls
+// that each finish in a few seconds can still exceed 5 requests/min without
+// this. Slots are reserved synchronously, so concurrent callers can't race.
+// ---------------------------------------------------------------------------
+
+const MIN_INTERVAL_MS = Math.ceil(60_000 / env.GEMINI_RPM) + 500;
+let nextSlotAt = 0;
+
+function acquireRpmSlot(): Promise<void> {
+  const now = Date.now();
+  const slot = Math.max(now, nextSlotAt);
+  nextSlotAt = slot + MIN_INTERVAL_MS;
+  return slot > now ? sleep(slot - now) : Promise.resolve();
 }
 
 // ---------------------------------------------------------------------------
@@ -119,6 +136,7 @@ async function callWithRetry<T>(
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
+      await acquireRpmSlot();
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,

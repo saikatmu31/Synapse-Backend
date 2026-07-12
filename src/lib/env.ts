@@ -21,4 +21,11 @@ export const env = {
   PORT: Number(process.env.PORT ?? 3000),
   NODE_ENV: process.env.NODE_ENV ?? 'development',
   IS_PROD: process.env.NODE_ENV === 'production',
+  // Gemini free tier: 5 requests/min, ~250 requests/day for gemini-2.5-flash.
+  // Raise these after enabling billing (Tier 1 allows ~1000 RPM).
+  GEMINI_RPM: Number(process.env.GEMINI_RPM ?? 5),
+  GEMINI_MAX_CONCURRENT: Number(process.env.GEMINI_MAX_CONCURRENT ?? 2),
+  // ~6 Gemini calls per budget unit worst case (see generate.ts); keep
+  // budget*6 under the daily request cap with headroom for retries.
+  NIGHTLY_BUDGET: Number(process.env.NIGHTLY_BUDGET ?? 15),
 } as const;

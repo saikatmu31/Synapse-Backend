@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { connectDB, disconnectDB, sendTelegram } from '../src/lib/index.js';
+import { connectDB, disconnectDB, env, sendTelegram } from '../src/lib/index.js';
 import { Track } from '../src/models/index.js';
 import { GenerationRun } from '../src/models/GenerationRun.js';
 import { ingestTrack } from '../src/pipeline/ingest.js';
@@ -7,7 +7,7 @@ import { generateForTrack } from '../src/pipeline/generate.js';
 import { reVerifyDisputed } from '../src/pipeline/freshness.js';
 import { finalizeRun } from '../src/pipeline/publish.js';
 
-const NIGHTLY_BUDGET = 40;
+const NIGHTLY_BUDGET = env.NIGHTLY_BUDGET;
 const LOCK_WINDOW_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 async function main(): Promise<void> {
